@@ -16,9 +16,26 @@ from langgraph.graph.message import add_messages
 
 warnings.filterwarnings("ignore")
 
+# Configuración de página
 st.set_page_config(page_title="HelpBot 360", page_icon="🤖")
 st.title("🤖 HelpBot 360 - Asistente TerraCampo")
 
+# ---------------------------------------------------------
+# 1. GESTIÓN DE API KEY (Soporta Streamlit Secrets y Sidebar)
+# ---------------------------------------------------------
+if "GOOGLE_API_KEY" in st.secrets:
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+elif "GOOGLE_API_KEY" not in os.environ:
+    api_key = st.sidebar.text_input("Ingresa tu GOOGLE_API_KEY:", type="password")
+    if api_key:
+        os.environ["GOOGLE_API_KEY"] = api_key
+    else:
+        st.info("Por favor ingresa tu API Key en los Secrets de Streamlit o en la barra lateral.")
+        st.stop()
+
+# ---------------------------------------------------------
+# 2. INICIALIZACIÓN DE LA BASE DE CONOCIMIENTO
+# ---------------------------------------------------------
 @st.cache_resource
 def iniciar_bot():
     archivos_politicas = [
@@ -43,7 +60,8 @@ def iniciar_bot():
     class State(TypedDict):
         messages: Annotated[list, add_messages]
 
-    model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+    # Modelo oficial Gemini 1.5 Flash
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
 
     def nodo_helpbot(state: State):
         pregunta_usuario = state["messages"][-1].content
@@ -71,15 +89,9 @@ def iniciar_bot():
 
 app_graph = iniciar_bot()
 
-# Gestión de API Key desde Secretos o Barra Lateral
-if "GOOGLE_API_KEY" not in os.environ:
-    api_key = st.sidebar.text_input("Ingresa tu GOOGLE_API_KEY:", type="password")
-    if api_key:
-        os.environ["GOOGLE_API_KEY"] = api_key
-    else:
-        st.info("Por favor ingresa tu API Key en la barra lateral para comenzar.")
-        st.stop()
-
+# ---------------------------------------------------------
+# 3. INTERFAZ DE CHAT
+# ---------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
     st.session_state.graph_state = {"messages": []}
