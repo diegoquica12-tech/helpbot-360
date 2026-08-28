@@ -20,22 +20,25 @@ st.set_page_config(page_title="HelpBot 360", page_icon="🤖")
 st.title("🤖 HelpBot 360 - Asistente TerraCampo")
 
 # ---------------------------------------------------------
-# 1. VALIDACIÓN DE API KEY
+# 1. VALIDACIÓN DE API KEY (Secrets + Sidebar)
 # ---------------------------------------------------------
 api_key = None
-if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-else:
-    api_key = st.sidebar.text_input("Ingresa tu GOOGLE_API_KEY:", type="password")
+
+if "GOOGLE_API_KEY" in st.secrets and str(st.secrets["GOOGLE_API_KEY"]).strip():
+    api_key = str(st.secrets["GOOGLE_API_KEY"]).strip()
 
 if not api_key:
-    st.info("Por favor ingresa tu GOOGLE_API_KEY en los Secrets de Streamlit o en la barra lateral.")
+    api_key = st.sidebar.text_input("Ingresa tu GOOGLE_API_KEY:", type="password")
+
+if not api_key or "tu_clave_real" in api_key:
+    st.warning("⚠️ Debes ingresar una GOOGLE_API_KEY válida para iniciar.")
+    st.info("Ingrésala en la barra lateral izquierda o configúrala en **Manage App -> Settings -> Secrets** en Streamlit Cloud.")
     st.stop()
 
 os.environ["GOOGLE_API_KEY"] = api_key
 
 # ---------------------------------------------------------
-# 2. CARGA DE DOCUMENTOS E ÍNDICE VECTORIAL (Caché)
+# 2. CARGA DEL ÍNDICE VECTORIAL
 # ---------------------------------------------------------
 @st.cache_resource
 def cargar_retriever():
@@ -67,7 +70,7 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 model = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.0-flash",
     google_api_key=api_key,
     temperature=0
 )
@@ -96,7 +99,7 @@ workflow.add_edge("bot", END)
 app_graph = workflow.compile()
 
 # ---------------------------------------------------------
-# 4. INTERFAZ DE CHAT
+# 4. INTERFAZ DE CHAT INTERACTIVA
 # ---------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -113,14 +116,18 @@ if prompt := st.chat_input("Escribe tu pregunta sobre las políticas aquí..."):
 
     with st.chat_message("assistant"):
         with st.spinner("Consultando manuales..."):
-            st.session_state.graph_state["messages"].append(HumanMessage(content=prompt))
-            resultado = app_graph.invoke(st.session_state.graph_state)
-            
-            res_content = resultado['messages'][-1].content
-            if isinstance(res_content, list):
-                respuesta_texto = "".join([b.get("text", "") if isinstance(b, dict) else str(b) for b in res_content])
-            else:
-                respuesta_texto = res_content
+            try:
+                st.session_state.graph_state["messages"].append(HumanMessage(content=prompt))
+                resultado = app_graph.invoke(st.session_state.graph_state)
+                
+                res_content = resultado['messages'][-1].content
+                if isinstance(res_content, list):
+                    respuesta_texto = "".join([b.get("text", "") if isinstance(b, dict) else str(b) for b in res_content])
+                else:
+                    respuesta_texto = res_content
 
-            st.write(respuesta_texto)
-            st.session_state.messages.append({"role": "assistant", "content": respuesta_texto})
+                st.write(respuesta_texto)
+                st.session_state.messages.append({"role": "assistant", "content": respuesta_texto})
+            except Exception as e:
+                st.error("❌ Error al conectar con Google Gemini. Verifica que tu GOOGLE_API_KEY sea correcta y esté activa.")
+                st.caption(f"Detalle técnico: {e}")
