@@ -20,10 +20,9 @@ st.set_page_config(page_title="HelpBot 360", page_icon="🤖")
 st.title("🤖 HelpBot 360 - Asistente TerraCampo")
 
 # ---------------------------------------------------------
-# 1. GESTIÓN Y VALIDACIÓN DE API KEY
+# 1. VALIDACIÓN DE API KEY
 # ---------------------------------------------------------
 api_key = None
-
 if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
     api_key = st.secrets["GOOGLE_API_KEY"]
 else:
@@ -36,10 +35,10 @@ if not api_key:
 os.environ["GOOGLE_API_KEY"] = api_key
 
 # ---------------------------------------------------------
-# 2. INICIALIZACIÓN CON CACHÉ Y PARÁMETRO EXPLÍCITO
+# 2. CARGA DE DOCUMENTOS E ÍNDICE VECTORIAL (Caché)
 # ---------------------------------------------------------
 @st.cache_resource
-def iniciar_bot(key_api):
+def cargar_retriever():
     archivos_politicas = [
         "01_Vacaciones_Permisos_y_Licencias_TerraCampo.docx",
         "02_Uso_y_Mantenimiento_de_Equipos_TerraCampo.docx",
@@ -57,47 +56,47 @@ def iniciar_bot(key_api):
 
     embeddings_gratuitos = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings_gratuitos)
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+    return vectorstore.as_retriever(search_kwargs={"k": 2})
 
-    class State(TypedDict):
-        messages: Annotated[list, add_messages]
-
-    # Asignación directa de API Key y modelo gemini-2.0-flash
-    model = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        google_api_key=key_api,
-        temperature=0
-    )
-
-    def nodo_helpbot(state: State):
-        pregunta_usuario = state["messages"][-1].content
-        docs_recuperados = retriever.invoke(pregunta_usuario)
-        contexto = "\n\n".join([doc.page_content for doc in docs_recuperados])
-        
-        system_prompt = f"""
-        Eres HelpBot 360, el asistente de TerraCampo S.A.S.
-        Responde a la consulta de forma amigable basándote ÚNICAMENTE en este contexto:
-        <contexto>
-        {contexto}
-        </contexto>
-        Si la información no está en el contexto, di que no la tienes y sugiere contactar a Recursos Humanos o Mantenimiento.
-        """
-        mensajes = [SystemMessage(content=system_prompt)] + state["messages"]
-        respuesta = model.invoke(mensajes)
-        return {"messages": [respuesta]}
-
-    workflow = StateGraph(State)
-    workflow.add_node("bot", nodo_helpbot)
-    workflow.add_edge(START, "bot")
-    workflow.add_edge("bot", END)
-    
-    return workflow.compile()
-
-# Se inicializa pasando la clave directamente
-app_graph = iniciar_bot(api_key)
+retriever = cargar_retriever()
 
 # ---------------------------------------------------------
-# 3. INTERFAZ DE CHAT
+# 3. CONSTRUCCIÓN DEL GRAFO LANGGRAPH
+# ---------------------------------------------------------
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+model = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    google_api_key=api_key,
+    temperature=0
+)
+
+def nodo_helpbot(state: State):
+    pregunta_usuario = state["messages"][-1].content
+    docs_recuperados = retriever.invoke(pregunta_usuario)
+    contexto = "\n\n".join([doc.page_content for doc in docs_recuperados])
+    
+    system_prompt = f"""
+    Eres HelpBot 360, el asistente de TerraCampo S.A.S.
+    Responde a la consulta de forma amigable basándote ÚNICAMENTE en este contexto:
+    <contexto>
+    {contexto}
+    </contexto>
+    Si la información no está en el contexto, di que no la tienes y sugiere contactar a Recursos Humanos o Mantenimiento.
+    """
+    mensajes = [SystemMessage(content=system_prompt)] + state["messages"]
+    respuesta = model.invoke(mensajes)
+    return {"messages": [respuesta]}
+
+workflow = StateGraph(State)
+workflow.add_node("bot", nodo_helpbot)
+workflow.add_edge(START, "bot")
+workflow.add_edge("bot", END)
+app_graph = workflow.compile()
+
+# ---------------------------------------------------------
+# 4. INTERFAZ DE CHAT
 # ---------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
