@@ -70,7 +70,7 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 model = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
+    model="gemini-3.6-flash",
     google_api_key=api_key,
     temperature=0
 )
