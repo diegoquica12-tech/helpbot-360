@@ -16,28 +16,30 @@ from langgraph.graph.message import add_messages
 
 warnings.filterwarnings("ignore")
 
-# Configuración de página
 st.set_page_config(page_title="HelpBot 360", page_icon="🤖")
 st.title("🤖 HelpBot 360 - Asistente TerraCampo")
 
 # ---------------------------------------------------------
-# 1. GESTIÓN DE API KEY (Soporta Streamlit Secrets y Sidebar)
+# 1. GESTIÓN Y VALIDACIÓN DE API KEY
 # ---------------------------------------------------------
-if "GOOGLE_API_KEY" in st.secrets:
-    os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
-elif "GOOGLE_API_KEY" not in os.environ:
+api_key = None
+
+if "GOOGLE_API_KEY" in st.secrets and st.secrets["GOOGLE_API_KEY"]:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
     api_key = st.sidebar.text_input("Ingresa tu GOOGLE_API_KEY:", type="password")
-    if api_key:
-        os.environ["GOOGLE_API_KEY"] = api_key
-    else:
-        st.info("Por favor ingresa tu API Key en los Secrets de Streamlit o en la barra lateral.")
-        st.stop()
+
+if not api_key:
+    st.info("Por favor ingresa tu GOOGLE_API_KEY en los Secrets de Streamlit o en la barra lateral.")
+    st.stop()
+
+os.environ["GOOGLE_API_KEY"] = api_key
 
 # ---------------------------------------------------------
-# 2. INICIALIZACIÓN DE LA BASE DE CONOCIMIENTO
+# 2. INICIALIZACIÓN CON CACHÉ Y PARÁMETRO EXPLÍCITO
 # ---------------------------------------------------------
 @st.cache_resource
-def iniciar_bot():
+def iniciar_bot(key_api):
     archivos_politicas = [
         "01_Vacaciones_Permisos_y_Licencias_TerraCampo.docx",
         "02_Uso_y_Mantenimiento_de_Equipos_TerraCampo.docx",
@@ -60,8 +62,12 @@ def iniciar_bot():
     class State(TypedDict):
         messages: Annotated[list, add_messages]
 
-    # Modelo oficial Gemini 1.5 Flash
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+    # Asignación directa de API Key y modelo gemini-2.0-flash
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.0-flash",
+        google_api_key=key_api,
+        temperature=0
+    )
 
     def nodo_helpbot(state: State):
         pregunta_usuario = state["messages"][-1].content
@@ -87,7 +93,8 @@ def iniciar_bot():
     
     return workflow.compile()
 
-app_graph = iniciar_bot()
+# Se inicializa pasando la clave directamente
+app_graph = iniciar_bot(api_key)
 
 # ---------------------------------------------------------
 # 3. INTERFAZ DE CHAT
