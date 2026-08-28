@@ -20,19 +20,17 @@ st.set_page_config(page_title="HelpBot 360", page_icon="🤖")
 st.title("🤖 HelpBot 360 - Asistente TerraCampo")
 
 # ---------------------------------------------------------
-# 1. VALIDACIÓN DE API KEY (Secrets + Sidebar)
+# 1. VALIDACIÓN DE API KEY
 # ---------------------------------------------------------
 api_key = None
-
 if "GOOGLE_API_KEY" in st.secrets and str(st.secrets["GOOGLE_API_KEY"]).strip():
     api_key = str(st.secrets["GOOGLE_API_KEY"]).strip()
 
 if not api_key:
     api_key = st.sidebar.text_input("Ingresa tu GOOGLE_API_KEY:", type="password")
 
-if not api_key or "tu_clave_real" in api_key:
+if not api_key:
     st.warning("⚠️ Debes ingresar una GOOGLE_API_KEY válida para iniciar.")
-    st.info("Ingrésala en la barra lateral izquierda o configúrala en **Manage App -> Settings -> Secrets** en Streamlit Cloud.")
     st.stop()
 
 os.environ["GOOGLE_API_KEY"] = api_key
@@ -81,14 +79,19 @@ def nodo_helpbot(state: State):
     contexto = "\n\n".join([doc.page_content for doc in docs_recuperados])
     
     system_prompt = f"""
-    Eres HelpBot 360, el asistente de TerraCampo S.A.S.
-    Responde a la consulta de forma amigable basándote ÚNICAMENTE en este contexto:
+    Eres el asistente virtual de TerraCampo S.A.S.
+    
+    REGLAS DE RESPUESTA DIRECTA:
+    1. Responde de forma concisa, clara y DIRECTA al punto.
+    2. NUNCA saludes (no digas "Hola", "¡Hola! Claro que sí", etc.).
+    3. NUNCA te presentes ni digas "Soy HelpBot 360".
+    4. Basa tu respuesta ÚNICAMENTE en este contexto:
     <contexto>
     {contexto}
     </contexto>
-    Si la información no está en el contexto, di que no la tienes y sugiere contactar a Recursos Humanos o Mantenimiento.
+    5. Si la información no está en el contexto, di brevemente que no la tienes y sugiere contactar a Recursos Humanos o Mantenimiento.
     """
-    mensajes = [SystemMessage(content=system_prompt)] + state["messages"]
+    mensajes = [SystemMessage(content=system_prompt), HumanMessage(content=pregunta_usuario)]
     respuesta = model.invoke(mensajes)
     return {"messages": [respuesta]}
 
@@ -99,12 +102,12 @@ workflow.add_edge("bot", END)
 app_graph = workflow.compile()
 
 # ---------------------------------------------------------
-# 4. INTERFAZ DE CHAT INTERACTIVA
+# 4. INTERFAZ DE CHAT
 # ---------------------------------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
-    st.session_state.graph_state = {"messages": []}
 
+# Mostrar historial visual en pantalla
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
@@ -117,8 +120,8 @@ if prompt := st.chat_input("Escribe tu pregunta sobre las políticas aquí..."):
     with st.chat_message("assistant"):
         with st.spinner("Consultando manuales..."):
             try:
-                st.session_state.graph_state["messages"].append(HumanMessage(content=prompt))
-                resultado = app_graph.invoke(st.session_state.graph_state)
+                # Se envía ÚNICAMENTE la última pregunta para evitar cargar respuestas anteriores
+                resultado = app_graph.invoke({"messages": [HumanMessage(content=prompt)]})
                 
                 res_content = resultado['messages'][-1].content
                 if isinstance(res_content, list):
@@ -129,5 +132,5 @@ if prompt := st.chat_input("Escribe tu pregunta sobre las políticas aquí..."):
                 st.write(respuesta_texto)
                 st.session_state.messages.append({"role": "assistant", "content": respuesta_texto})
             except Exception as e:
-                st.error("❌ Error al conectar con Google Gemini. Verifica que tu GOOGLE_API_KEY sea correcta y esté activa.")
+                st.error("❌ Error al procesar la consulta.")
                 st.caption(f"Detalle técnico: {e}")
