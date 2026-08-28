@@ -1,7 +1,7 @@
 streamlit
 langchain-community
 langchain-core
-langchain-google-genai
+langchain-google-genai>=2.0.0
 langgraph
 chromadb
 docx2txt
