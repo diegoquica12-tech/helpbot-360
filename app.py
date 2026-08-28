@@ -81,9 +81,9 @@ def nodo_helpbot(state: State):
     system_prompt = f"""
     Eres el asistente virtual de TerraCampo S.A.S.
     
-    REGLAS DE RESPUESTA DIRECTA:
+    REGLAS STRICTAS DE RESPUESTA:
     1. Responde de forma concisa, clara y DIRECTA al punto.
-    2. NUNCA saludes (no digas "Hola", "¡Hola! Claro que sí", etc.).
+    2. NUNCA saludes (está prohibido decir "Hola", "¡Hola!", "Claro que sí", etc.).
     3. NUNCA te presentes ni digas "Soy HelpBot 360".
     4. Basa tu respuesta ÚNICAMENTE en este contexto:
     <contexto>
@@ -102,16 +102,23 @@ workflow.add_edge("bot", END)
 app_graph = workflow.compile()
 
 # ---------------------------------------------------------
-# 4. INTERFAZ DE CHAT
+# 4. INTERFAZ DE CHAT CON BIENVENIDA ÚNICA
 # ---------------------------------------------------------
+# Se define el saludo inicial SOLO la primera vez que se carga la app
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = [
+        {
+            "role": "assistant", 
+            "content": "¡Hola! Soy HelpBot 360, el asistente de TerraCampo S.A.S. 😊 ¿En qué te puedo ayudar hoy sobre los procedimientos o beneficios de la empresa?"
+        }
+    ]
 
-# Mostrar historial visual en pantalla
+# Mostrar todo el historial en pantalla
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
+# Capturar preguntas del usuario
 if prompt := st.chat_input("Escribe tu pregunta sobre las políticas aquí..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -120,7 +127,7 @@ if prompt := st.chat_input("Escribe tu pregunta sobre las políticas aquí..."):
     with st.chat_message("assistant"):
         with st.spinner("Consultando manuales..."):
             try:
-                # Se envía ÚNICAMENTE la última pregunta para evitar cargar respuestas anteriores
+                # Se envía solo la consulta actual al modelo
                 resultado = app_graph.invoke({"messages": [HumanMessage(content=prompt)]})
                 
                 res_content = resultado['messages'][-1].content
